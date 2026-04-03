@@ -1,0 +1,24 @@
+# NanoClaw Test Project — Simple Todo App
+
+## Overview
+Build a minimal HTML/CSS/JS todo list app that runs in the browser.
+
+## Features
+1. Add a new todo item via text input + button
+2. Mark todos as complete (strikethrough)
+3. Delete individual todos
+4. Persist todos in localStorage
+5. Dark theme with modern styling
+
+## Tech Stack
+- Single index.html file
+- Vanilla CSS (dark theme, rounded corners, subtle animations)
+- Vanilla JavaScript (no frameworks)
+
+## User Flow
+1. User opens index.html in browser
+2. Types a task in the input field, clicks "Add"
+3. Task appears in the list below
+4. Clicking a task toggles done/undone
+5. Clicking the X button removes it
+6. Refreshing the page retains all todos

@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NanoClaw | Desktop Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --glass-bg: rgba(20, 25, 40, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-primary: #6366f1;
+            --accent-secondary: #a855f7;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Dynamic Background Orbs */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: 0;
+            opacity: 0.5;
+            animation: float 20s infinite alternate ease-in-out;
+        }
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: var(--accent-primary);
+            top: -100px;
+            left: -100px;
+        }
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: var(--accent-secondary);
+            bottom: -150px;
+            right: -100px;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 50px) scale(1.1); }
+        }
+
+        /* Main Chat Container */
+        .chat-container {
+            width: 90%;
+            max-width: 1000px;
+            height: 85vh;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Header */
+        .header {
+            padding: 24px 32px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(20, 25, 40, 0.4);
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .status {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .name {
+            font-weight: 600;
+            font-size: 1.2rem;
+            letter-spacing: 0.5px;
+        }
+
+        .online-indicator {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .badge {
+            background: rgba(255,255,255,0.05);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Chat Area */
+        .messages {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .msg-wrapper {
+            display: flex;
+            max-width: 80%;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes slideUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bot { align-self: flex-start; }
+        .user { align-self: flex-end; flex-direction: row-reverse; }
+
+        .bubble {
+            padding: 16px 20px;
+            border-radius: 20px;
+            line-height: 1.6;
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .bot .bubble {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 4px;
+            color: var(--text-main);
+        }
+
+        .user .bubble {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-bottom-right-radius: 4px;
+            color: white;
+        }
+
+        .action-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--accent-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: #a5b4fc;
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 24px 32px;
+            background: rgba(10, 15, 25, 0.6);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 16px;
+            align-items: flex-end;
+        }
+
+        .input-box {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+
+        .input-box:focus-within {
+            border-color: var(--accent-primary);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+        }
+
+        textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.05rem;
+            resize: none;
+            outline: none;
+            max-height: 150px;
+            min-height: 24px;
+            overflow-y: hidden;
+        }
+
+        textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 16px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px rgba(99, 102, 241, 0.5);
+        }
+
+        .send-btn:active {
+            transform: translateY(0);
+        }
+
+        .send-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+            margin-left: 2px;
+        }
+
+        /* Typing Indicator */
+        .typing {
+            display: flex;
+            gap: 6px;
+            padding: 20px 24px;
+            align-items: center;
+        }
+
+        .typing span {
+            width: 6px;
+            height: 6px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing span:nth-child(1) { animation-delay: -0.32s; }
+        .typing span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="chat-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <div class="logo">NC</div>
+                <div class="status">
+                    <span class="name">NanoClaw Agent</span>
+                    <span class="online-indicator"><div class="dot"></div> System Online & Listening</span>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="badge">🧠 MiniMax abab6.5g-chat</div>
+                <div class="badge">📡 Telegram Linked</div>
+            </div>
+        </header>
+
+        <!-- Chat Area -->
+        <div class="messages" id="messages">
+            <div class="msg-wrapper bot">
+                <div class="bubble">
+                    Systems initialized. Desktop monitoring active. I am ready to assist you. 
+                    <br><br>
+                    You can ask me to search the web, create documents, play music, or orchestrate projects using Perplexity. What would you like to do?
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="input-box">
+                <textarea id="userInput" placeholder="Ask NanoClaw to open a file, search YouTube, or run a task..." rows="1"></textarea>
+                <div class="input-footer">
+                    <span>Press Enter to send, Shift+Enter for new line</span>
+                    <span>OS Bridge: Connected</span>
+                </div>
+            </div>
+            <button class="send-btn" id="sendBtn">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const inputList = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messages = document.getElementById('messages');
+
+        // Auto-resize textarea
+        inputList.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight < 150 ? this.scrollHeight : 150) + 'px';
+        });
+
+        const addMessage = (text, sender, actionData = null) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = `msg-wrapper ${sender}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.innerHTML = text.replace(/\n/g, '<br>');
+
+            if (actionData) {
+                const actionChip = document.createElement('div');
+                actionChip.className = 'action-chip';
+                actionChip.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Executed: ${actionData.action} (${actionData.args})
+                `;
+                bubble.appendChild(actionChip);
+            }
+
+            wrapper.appendChild(bubble);
+            messages.appendChild(wrapper);
+            messages.scrollTop = messages.scrollHeight;
+        };
+
+        const showTyping = () => {
+            const wrapper = document.createElement('div');
+            wrapper.className = `msg-wrapper bot`;
+            wrapper.id = 'typingIndicator';
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble typing';
+            bubble.innerHTML = '<span></span><span></span><span></span>';
+            
+            wrapper.appendChild(bubble);
+            messages.appendChild(wrapper);
+            messages.scrollTop = messages.scrollHeight;
+            return wrapper;
+        };
+
+        const simulateResponse = (userText) => {
+            const typing = showTyping();
+            
+            // Artificial delay to simulate MiniMax API Processing
+            setTimeout(() => {
+                typing.remove();
+                
+                const txt = userText.toLowerCase();
+                let reply = "Executing task natively.";
+                let action = null;
+
+                if (txt.includes('youtube') || txt.includes('video')) {
+                    reply = "I've launched Chrome and started searching YouTube for you.";
+                    action = { action: 'YouTubeSearch', args: 'user query' };
+                } else if (txt.includes('music') || txt.includes('play')) {
+                    reply = "Launching Spotify/YouTube to play your music right now.";
+                    action = { action: 'PlayMusic', args: 'track name' };
+                } else if (txt.includes('create') || txt.includes('document')) {
+                    reply = "Writing the document and opening it in your default editor.";
+                    action = { action: 'CreateDocument', args: 'document.txt' };
+                } else if (txt.includes('web') || txt.includes('search')) {
+                    reply = "Opening Google Search.";
+                    action = { action: 'WebSearch', args: 'search term' };
+                } else {
+                    reply = "I interpreted your intent and ran the corresponding system command via MiniMax translation.";
+                    action = { action: 'TerminalCommand', args: 'generic task' };
+                }
+
+                addMessage(reply, 'bot', action);
+            }, 1800);
+        };
+
+        const handleSend = () => {
+            const text = inputList.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            inputList.value = '';
+            inputList.style.height = 'auto';
+
+            simulateResponse(text);
+        };
+
+        sendBtn.addEventListener('click', handleSend);
+        inputList.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+    </script>
+</body>
+</html>

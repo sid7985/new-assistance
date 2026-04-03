@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoClaw Orchestration Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --color-bg:#0e0e0f;--color-surface:#141416;--color-surface-2:#1a1a1c;
+  --color-surface-offset:#1f1f22;--color-border:rgba(255,255,255,0.07);
+  --color-text:#e8e8ea;--color-text-muted:#8a8a8f;--color-text-faint:#4a4a50;
+  --color-primary:#5b9cf6;--color-primary-dim:rgba(91,156,246,0.12);
+  --color-primary-glow:rgba(91,156,246,0.25);
+  --color-green:#4ade80;--color-green-dim:rgba(74,222,128,0.1);
+  --color-orange:#fb923c;--color-orange-dim:rgba(251,146,60,0.1);
+  --color-purple:#a78bfa;--color-purple-dim:rgba(167,139,250,0.1);
+  --color-yellow:#fbbf24;--color-yellow-dim:rgba(251,191,36,0.1);
+  --color-teal:#2dd4bf;--color-teal-dim:rgba(45,212,191,0.1);
+  --font-body:'Geist',system-ui,sans-serif;
+  --font-mono:'Geist Mono',monospace;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:14px;line-height:1.6;min-height:100vh;padding:40px 20px 80px}
+.page{max-width:860px;margin:0 auto}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:48px;padding-bottom:24px;border-bottom:1px solid var(--color-border)}
+.logo{width:32px;height:32px;flex-shrink:0}
+.header-title{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.header-sub{font-size:12px;color:var(--color-text-muted);font-family:var(--font-mono)}
+.phase-label{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--font-mono);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;color:var(--color-text-muted);margin-bottom:12px}
+.phase-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.step{display:grid;grid-template-columns:32px 1fr;gap:0 16px;margin-bottom:4px;position:relative}
+.step-line{display:flex;flex-direction:column;align-items:center}
+.step-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;font-family:var(--font-mono);flex-shrink:0;position:relative;z-index:1;border:1px solid var(--color-border)}
+.step-connector{width:1px;background:var(--color-border);flex:1;min-height:8px;margin-top:2px}
+.step-body{padding-bottom:20px}
+.step-title{font-size:14px;font-weight:600;letter-spacing:-0.01em;margin-bottom:4px;line-height:1.3;padding-top:6px}
+.step-desc{font-size:13px;color:var(--color-text-muted);line-height:1.6;max-width:580px}
+.step-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-mono);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--color-border);color:var(--color-text-muted);margin-top:8px;margin-right:4px}
+.tool{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:500;font-family:var(--font-mono);padding:2px 8px;border-radius:9999px;margin-top:8px;margin-right:4px}
+.tool-pplx{background:var(--color-primary-dim);color:var(--color-primary);border:1px solid rgba(91,156,246,0.2)}
+.tool-stitch{background:var(--color-purple-dim);color:var(--color-purple);border:1px solid rgba(167,139,250,0.2)}
+.tool-opencode{background:var(--color-green-dim);color:var(--color-green);border:1px solid rgba(74,222,128,0.2)}
+.tool-antigravity{background:var(--color-orange-dim);color:var(--color-orange);border:1px solid rgba(251,146,60,0.2)}
+.tool-nanoclaw{background:var(--color-teal-dim);color:var(--color-teal);border:1px solid rgba(45,212,191,0.2)}
+.tool-telegram{background:rgba(33,150,243,0.1);color:#64b5f6;border:1px solid rgba(100,181,246,0.2)}
+.loop-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;margin:4px 0 20px 48px;position:relative;overflow:hidden}
+.loop-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--color-primary),var(--color-purple))}
+.loop-title{font-size:11px;font-family:var(--font-mono);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--color-primary);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.loop-steps{display:flex;flex-direction:column;gap:6px}
+.loop-step{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--color-text-muted)}
+.loop-arrow{color:var(--color-text-faint);font-size:10px;margin-top:2px;flex-shrink:0}
+.loop-step-text strong{color:var(--color-text)}
+.cycle-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--color-primary-dim),var(--color-purple-dim));border:1px solid rgba(91,156,246,0.2);border-radius:9999px;padding:4px 12px;font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--color-primary);margin:8px 0 0}
+.phase-divider{display:flex;align-items:center;gap:12px;margin:32px 0 20px;opacity:0.5}
+.phase-divider-line{flex:1;height:1px;background:var(--color-border)}
+.phase-divider-text{font-size:10px;font-family:var(--font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--color-text-faint);white-space:nowrap}
+.final-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin:8px 0 0 48px;display:flex;align-items:center;gap:16px}
+.final-icon{width:40px;height:40px;background:var(--color-green-dim);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
+.final-text-title{font-size:14px;font-weight:600;color:var(--color-green)}
+.final-text-sub{font-size:12px;color:var(--color-text-muted);margin-top:2px}
+.prompt-section{margin-top:48px;padding-top:32px;border-top:1px solid var(--color-border)}
+.prompt-section-title{font-size:13px;font-weight:600;color:var(--color-text-muted);letter-spacing:0.04em;text-transform:uppercase;font-family:var(--font-mono);margin-bottom:20px}
+.prompt-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px}
+.prompt-card-header{padding:12px 16px;background:var(--color-surface-offset);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between}
+.prompt-card-label{font-size:11px;font-family:var(--font-mono);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--color-text-muted)}
+.prompt-card-tool{font-size:11px;font-family:var(--font-mono);padding:2px 8px;border-radius:9999px}
+.prompt-body{padding:16px;font-size:13px;line-height:1.7;color:var(--color-text);white-space:pre-wrap;font-family:var(--font-mono)}
+.prompt-var{color:var(--color-yellow);font-style:italic}
+.copy-btn{margin:0 16px 16px;display:inline-flex;align-items:center;gap:6px;background:var(--color-primary-dim);border:1px solid rgba(91,156,246,0.25);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;font-family:var(--font-mono);color:var(--color-primary);cursor:pointer;transition:all 150ms ease}
+.copy-btn:hover{background:var(--color-primary-glow)}
+.copy-btn:active{transform:scale(0.97)}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <svg class="logo" viewBox="0 0 32 32" fill="none" aria-label="NanoClaw logo">
+      <rect width="32" height="32" rx="8" fill="#1a1a1c"/>
+      <path d="M8 22 L14 10 L16 15 L18 10 L24 22" stroke="#5b9cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="16" cy="15" r="2" fill="#a78bfa"/>
+    </svg>
+    <div>
+      <div class="header-title">NanoClaw Orchestration Flow</div>
+      <div class="header-sub">Sid's Dev Workflow — Full Cycle v1.0</div>
+    </div>
+  </header>
+
+  <div class="phase-label"><span class="phase-dot" style="background:var(--color-primary)"></span>Phase 1 — Foundation</div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-primary-dim);color:var(--color-primary);border-color:rgba(91,156,246,0.3)">01</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">Write the PRD in Perplexity (Comet)</div>
+      <div class="step-desc">Define your project — features, goals, user flows, tech stack. Be specific. The richer the PRD, the better every downstream prompt will be.</div>
+      <span class="tool tool-pplx">Perplexity + Comet</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-primary-dim);color:var(--color-primary);border-color:rgba(91,156,246,0.3)">02</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">Generate Sequential Coding Prompts</div>
+      <div class="step-desc">Feed the PRD into Perplexity (Comet). Ask it to return a JSON array of sequential coding prompts — one per feature or screen. NanoClaw stores and queues these.</div>
+      <span class="tool tool-pplx">Perplexity + Comet</span>
+      <span class="tool tool-nanoclaw">NanoClaw stores output</span>
+    </div>
+  </div>
+
+  <div class="phase-divider"><div class="phase-divider-line"></div><div class="phase-divider-text">Phase 2 — UI Design</div><div class="phase-divider-line"></div></div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-purple-dim);color:var(--color-purple);border-color:rgba(167,139,250,0.3)">03</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">Generate Per-Screen Prompts for Stitch</div>
+      <div class="step-desc">Ask Perplexity to generate a separate UI prompt for each screen of your app — tailored for Stitch. One prompt per screen, describing layout, components, and purpose.</div>
+      <span class="tool tool-pplx">Perplexity + Comet</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-purple-dim);color:var(--color-purple);border-color:rgba(167,139,250,0.3)">04</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">Design UI in Stitch → Download ZIP</div>
+      <div class="step-desc">Open Stitch, paste each screen prompt, generate the UI. Download the full ZIP. NanoClaw automatically extracts it into the project folder and reads all HTML files.</div>
+      <span class="tool tool-stitch">Stitch</span>
+      <span class="tool tool-nanoclaw">NanoClaw extracts ZIP</span>
+    </div>
+  </div>
+
+  <div class="phase-divider"><div class="phase-divider-line"></div><div class="phase-divider-text">Phase 3 — Iterative Build Loop</div><div class="phase-divider-line"></div></div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-green-dim);color:var(--color-green);border-color:rgba(74,222,128,0.3)">05</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">OpenCode Reads HTML Files from Stitch</div>
+      <div class="step-desc">NanoClaw instructs OpenCode to read all extracted HTML files. OpenCode understands the full UI structure and is ready to integrate everything into the codebase.</div>
+      <span class="tool tool-opencode">OpenCode</span>
+      <span class="tool tool-nanoclaw">NanoClaw orchestrates</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-green-dim);color:var(--color-green);border-color:rgba(74,222,128,0.3)">06</div><div class="step-connector" style="min-height:160px"></div></div>
+    <div class="step-body">
+      <div class="step-title">Perplexity ↔ OpenCode Build Loop</div>
+      <div class="step-desc">The core iterative cycle. NanoClaw runs this automatically — waiting 1 min between steps, extending to 3 min on timeout.</div>
+    </div>
+  </div>
+
+  <div class="loop-box">
+    <div class="loop-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.44"/></svg>Repeating Build Cycle</div>
+    <div class="loop-steps">
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>Perplexity (Comet):</strong> Given PRD + last OpenCode output, return next coding prompt</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>NanoClaw:</strong> Passes prompt to OpenCode, waits for output (1–3 min adaptive timeout)</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>OpenCode:</strong> Executes prompt using MiniMax M2.5 (free) — returns code output</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>NanoClaw:</strong> Saves iteration to project memory JSON file</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>Telegram:</strong> Sends step completion update to @Siddharth0001</div></div>
+      <div class="loop-step"><span class="loop-arrow">↻</span><div class="loop-step-text"><strong>Repeat</strong> until Perplexity returns <code style="color:var(--color-yellow);font-size:11px">PROJECT_COMPLETE</code></div></div>
+    </div>
+    <div class="cycle-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.44"/></svg>Perplexity → OpenCode → Memory → Telegram → repeat</div>
+  </div>
+
+  <div class="phase-divider"><div class="phase-divider-line"></div><div class="phase-divider-text">Phase 4 — Analysis & Polish Loop</div><div class="phase-divider-line"></div></div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-orange-dim);color:var(--color-orange);border-color:rgba(251,146,60,0.3)">07</div><div class="step-connector"></div></div>
+    <div class="step-body">
+      <div class="step-title">Antigravity Deep Analysis — Claude Opus 4.6</div>
+      <div class="step-desc">Open Antigravity, select Claude Opus 4.6. Feed in the completed project. Antigravity produces a structured report: what's done, what's missing, bugs, and prioritized improvements.</div>
+      <span class="tool tool-antigravity">Antigravity</span>
+      <span class="step-tag">Claude Opus 4.6</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-orange-dim);color:var(--color-orange);border-color:rgba(251,146,60,0.3)">08</div><div class="step-connector" style="min-height:120px"></div></div>
+    <div class="step-body">
+      <div class="step-title">Refinement Loop — Antigravity → Perplexity → OpenCode</div>
+      <div class="step-desc">Feed Antigravity's analysis back into Perplexity. Get new prompts. Run OpenCode again. Repeat 2–3 cycles until the project is professional-grade.</div>
+      <span class="tool tool-pplx">Perplexity + Comet</span>
+      <span class="tool tool-opencode">OpenCode</span>
+      <span class="tool tool-antigravity">Antigravity</span>
+    </div>
+  </div>
+
+  <div class="loop-box" style="border-color:rgba(251,146,60,0.2)">
+    <div class="loop-title" style="color:var(--color-orange)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.44"/></svg>Refinement Cycle</div>
+    <div class="loop-steps">
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>Antigravity (Opus 4.6):</strong> Analyze project → output requirements + improvement doc</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>Perplexity (Comet):</strong> Take analysis → generate refined coding prompts</div></div>
+      <div class="loop-step"><span class="loop-arrow">→</span><div class="loop-step-text"><strong>OpenCode:</strong> Run refined prompts → improved codebase</div></div>
+      <div class="loop-step"><span class="loop-arrow">↻</span><div class="loop-step-text"><strong>Repeat</strong> 2–3 cycles until project is professional-grade</div></div>
+    </div>
+    <div class="cycle-badge" style="background:linear-gradient(135deg,var(--color-orange-dim),var(--color-purple-dim));border-color:rgba(251,146,60,0.2);color:var(--color-orange)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.44"/></svg>Antigravity → Perplexity → OpenCode → repeat</div>
+  </div>
+
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:var(--color-green-dim);color:var(--color-green);border-color:rgba(74,222,128,0.3)">09</div></div>
+    <div class="step-body">
+      <div class="step-title">Finalize, Save Memory & New Project</div>
+      <div class="step-desc">Project complete. NanoClaw saves the full memory JSON. Telegram sends final notification. For next project, run with <code style="color:var(--color-yellow);font-size:12px">-new</code> flag to wipe memory and start fresh.</div>
+      <span class="tool tool-nanoclaw">Memory saved</span>
+      <span class="tool tool-telegram">Telegram notified</span>
+    </div>
+  </div>
+
+  <div class="final-box">
+    <div class="final-icon">&#10003;</div>
+    <div>
+      <div class="final-text-title">Project Complete — Professional Level</div>
+      <div class="final-text-sub">Memory archived &middot; Telegram notified &middot; Start next: <code style="font-family:var(--font-mono)">go run main.go -project "NewApp" -prd ./prd.txt -new</code></div>
+    </div>
+  </div>
+
+  <div class="prompt-section">
+    <div class="prompt-section-title">Ready-to-Use Prompts</div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <div class="prompt-card-label">Step 2 — Generate Coding Prompts</div>
+        <span class="prompt-card-tool tool-pplx">Perplexity + Comet</span>
+      </div>
+      <div class="prompt-body" id="p2">Act as a senior software architect. I have the following PRD:
+
+[PASTE YOUR PRD HERE]
+
+Generate a JSON array of sequential coding prompts for OpenCode to build this
+project step by step. Each prompt should be a precise, self-contained coding
+instruction for one task. Return ONLY a valid JSON array of strings.
+Example format: ["prompt 1", "prompt 2", "prompt 3"]</div>
+      <button class="copy-btn" onclick="copyId(this,'p2')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy prompt</button>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <div class="prompt-card-label">Step 3 — Per-Screen Prompts for Stitch</div>
+        <span class="prompt-card-tool tool-stitch">Stitch</span>
+      </div>
+      <div class="prompt-body" id="p3">Given this PRD:
+
+[PASTE YOUR PRD HERE]
+
+Generate one UI design prompt per screen for use in Stitch (Google UI generator).
+Each prompt should describe: screen purpose, layout, key components, visual style.
+Return as a numbered list. Be specific enough that Stitch generates a complete,
+usable screen from each prompt alone.</div>
+      <button class="copy-btn" onclick="copyId(this,'p3')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy prompt</button>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <div class="prompt-card-label">Step 6 — Next Build Prompt (Loop)</div>
+        <span class="prompt-card-tool tool-pplx">Perplexity + Comet</span>
+      </div>
+      <div class="prompt-body" id="p6">PRD: [YOUR PRD]
+
+Last OpenCode output (iteration N):
+[PASTE OPENCODE OUTPUT HERE]
+
+What is the next single coding prompt for OpenCode to continue building this
+project? Be precise and actionable — one task only.
+If the project is fully complete based on the PRD, reply with exactly:
+PROJECT_COMPLETE</div>
+      <button class="copy-btn" onclick="copyId(this,'p6')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy prompt</button>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <div class="prompt-card-label">Step 7 — Antigravity Analysis (Opus 4.6)</div>
+        <span class="prompt-card-tool tool-antigravity">Antigravity</span>
+      </div>
+      <div class="prompt-body" id="p7">You are a senior software architect and QA engineer.
+
+Analyze this completed project against its original PRD:
+
+PRD: [YOUR PRD]
+Project output: [PROJECT FILES OR SUMMARY]
+
+Produce a structured report with:
+1. Requirements from PRD that are fully met
+2. Requirements that are missing or incomplete
+3. Bugs or quality issues found
+4. Specific improvements ranked by priority
+5. A refined requirements doc for the next build cycle
+
+Be thorough. This drives the next Perplexity -> OpenCode refinement loop.</div>
+      <button class="copy-btn" onclick="copyId(this,'p7')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy prompt</button>
+    </div>
+
+  </div>
+</div>
+<script>
+function copyId(btn, id) {
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 12 4 10"/></svg> Copied!';
+    btn.style.cssText += ';color:var(--color-green);background:var(--color-green-dim);border-color:rgba(74,222,128,0.25)';
+    setTimeout(() => {
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy prompt';
+      btn.style.color='';btn.style.background='';btn.style.borderColor='';
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>
