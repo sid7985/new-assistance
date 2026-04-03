@@ -30,6 +30,15 @@
 - **⚙️ AI-Native Workflow** - No complex setup wizards or dashboards. Everything is managed through the Claude CLI.
 - **🏗️ Skill-Based Extensibility** - Add new features like `/add-whatsapp` or `/add-gmail` as skills that modify the codebase directly, keeping it lean.
 
+## 🛠️ NanoClaw Orchestrator
+
+This repository now includes the consolidated **NanoClaw Orchestrator**, a Go-based runtime for powering advanced agentic behaviors:
+
+- **🤖 Diverse Model Support**: Integration with MiniMax, Perplexity, and Ollama.
+- **🌐 Web Core**: Built-in Selenium and WebDriver support for automated web tasks.
+- **📦 Container Automation**: Enhanced management of isolated Docker/MicroVM sandboxes.
+- **📺 Media Control**: Scripts for YouTube playback and media management.
+
 ## 🛠️ Quick Start
 
 ```bash
