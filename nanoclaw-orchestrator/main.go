@@ -7,16 +7,20 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"nanoclaw-orchestrator/config"
+	"nanoclaw-orchestrator/internal"
+	"nanoclaw-orchestrator/internal/api"
 	"nanoclaw-orchestrator/internal/computer"
 	"nanoclaw-orchestrator/internal/minimax"
 	"nanoclaw-orchestrator/internal/orchestrator"
 	"nanoclaw-orchestrator/internal/steps"
 	"nanoclaw-orchestrator/internal/telegram"
+	"nanoclaw-orchestrator/internal/venice"
 )
 
 var memory = struct {
@@ -37,6 +41,7 @@ func main() {
 	repoURL := flag.String("repo", "", "Git repo URL to clone into project folder")
 	newFlag := flag.Bool("new", false, "Start fresh (clears memory)")
 	calibrate := flag.Bool("calibrate", false, "Run calibration mode")
+	useVenice := flag.Bool("venice", false, "Use Venice/Mithril instead of MiniMax")
 	flag.Parse()
 
 	printBanner()
@@ -55,7 +60,16 @@ func main() {
 		fmt.Println("Memory cleared")
 	}
 
+	db, err := internal.NewDatabase(filepath.Join(cfg.ProjectDir, "nanoclaw.db"))
+	if err != nil {
+		fmt.Printf("⚠️  Database initialization failed: %v. Running in memory-only mode.\n", err)
+	} else {
+		// Boot API Server for Dashboard Dashboard
+		go api.StartServer("8080", db)
+	}
+
 	minimaxClient := minimax.NewClient(cfg.MiniMaxAPIKey, cfg.MiniMaxGroupID)
+	veniceClient := venice.NewClient(cfg.VeniceAPIKey, cfg.VeniceModel)
 
 	openCodeRunner := &steps.OpenCodeRunner{
 		WorkDir: cfg.ProjectDir,
@@ -83,12 +97,86 @@ func main() {
 	var tgBot *telegram.Bot
 	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
 		tgBot = telegram.NewBot(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.ProjectDir, func(req string) (string, error) {
-			// Proxy telegram text requests to NanoClaw engine
-			return executeActionFromPrompt(req, minimaxClient, openCodeRunner, cfg.ProjectDir)
+			// ── Budget Gate (Paperclip-inspired) ──
+			if db != nil && db.IsBudgetExceeded() {
+				limit, spent, _ := db.GetBudgetStatus()
+				return "", fmt.Errorf("🚫 Monthly budget exceeded ($%.2f / $%.2f). Use /budget to adjust", float64(spent)/100, float64(limit)/100)
+			}
+
+			// ── Create a mission for tracking ──
+			var missionID int64
+			if db != nil {
+				missionID, _ = db.CreateMission(req)
+			}
+
+			// ── Mem0 Context Injection ──
+			var memoryContext string
+			if db != nil {
+				mems, err := db.GetEntityMemories("user", "telegram_user")
+				if err == nil && len(mems) > 0 {
+					memoryContext = "User Preferences Context:\n" + strings.Join(mems, "\n") + "\n\n"
+				}
+			}
+
+			// Add the context to the request
+			augmentedReq := req
+			if memoryContext != "" {
+				augmentedReq = memoryContext + "Current Request: " + req
+			}
+
+			// ── Execute ──
+			var reply string
+			var execErr error
+			if *useVenice {
+				reply, execErr = executeActionWithVenice(augmentedReq, veniceClient, openCodeRunner, cfg.ProjectDir)
+			} else {
+				reply, execErr = executeActionFromPrompt(augmentedReq, minimaxClient, openCodeRunner, cfg.ProjectDir)
+			}
+
+			// ── Audit Trail & Budget ──
+			if db != nil {
+				source := "minimax"
+				if *useVenice {
+					source = "venice"
+				}
+				if execErr != nil {
+					db.LogAction(missionID, "ERROR", execErr.Error(), source, 0)
+					db.FailMission(missionID, execErr.Error())
+				} else {
+					db.LogAction(missionID, "COMPLETED", reply, source, 500) // Estimate ~500 tokens per action
+					db.CompleteMission(missionID)
+					db.AddMissionTokens(missionID, 500)
+					db.RecordSpend(1) // ~$0.01 per MiniMax call estimate
+				}
+			}
+
+			return reply, execErr
 		})
 		tgStopChan := make(chan struct{})
 		go tgBot.PollForRepoURLs(tgStopChan)
 		defer close(tgStopChan)
+
+		// Start Proactive Heartbeat (every 5 minutes)
+		hb := orchestrator.NewHeartbeat(5 * time.Minute)
+		hb.Start(func() {
+			fmt.Println("\n💓 Heartbeat: Proactively checking for tasks...")
+			screenPath := "/tmp/nanoclaw_heartbeat_screen.png"
+			if err := computer.TakeScreenshot(screenPath); err == nil {
+				prompt := "Proactive Check: Look at the current screen and your project context. Is there anything you should be doing right now to help the Founder? If so, formulate a plan. If not, reply with 'Status: All quiet'."
+				var reply string
+				var err error
+				if *useVenice {
+					reply, err = executeActionWithVenice(prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
+				} else {
+					reply, err = executeActionFromPrompt(prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
+				}
+
+				if err == nil && reply != "" && !strings.Contains(reply, "All quiet") {
+					tgBot.SendMessage("💓 Proactive Action Triggered:\n" + reply)
+					tgBot.SendScreenshot(screenPath, "Current desktop state")
+				}
+			}
+		})
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -110,11 +198,13 @@ func main() {
 		fmt.Printf("\n=== Prompt %d ===\n> ", i)
 		
 		var promptBuilder strings.Builder
+		shouldExit := false
 		for scanner.Scan() {
 			line := scanner.Text()
 			if strings.TrimSpace(line) == "exit" {
 				fmt.Println("Exiting NanoClaw...")
-				os.Exit(0)
+				shouldExit = true
+				break
 			}
 			if strings.TrimSpace(line) == "END" || (promptBuilder.Len() == 0 && line != "") {
 				// If they typed END or they just typed a one-liner without END, we proceed.
@@ -128,6 +218,10 @@ func main() {
 			}
 			// Only require END if they pasted multiple lines
 			promptBuilder.WriteString(line + "\n")
+		}
+
+		if shouldExit {
+			break
 		}
 
 		prompt := strings.TrimSpace(promptBuilder.String())
@@ -158,6 +252,9 @@ func main() {
 		_, err = orch.RunStep(orchestrator.WorkflowStep{
 			Name: fmt.Sprintf("prompt_%d", i),
 			Action: func() (string, error) {
+				if *useVenice {
+					return executeActionWithVenice(prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
+				}
 				return executeActionFromPrompt(prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
 			},
 		})
@@ -170,7 +267,7 @@ func main() {
 }
 
 func printBanner() {
-	fmt.Println(`
+	fmt.Print(`
    _                _   _ _         _ 
   | |    ___   __ _| |_| |_ _ __ | |
   | |   / _ \ / _' | __|  _| '_ \| |
@@ -206,7 +303,7 @@ func executeActionFromPrompt(prompt string, minimaxClient *minimax.Client, openC
 		return executeSingleAction(taskPrompt, minimaxClient, openCodeRunner, projectDir)
 	}
 
-	return orch.ExecuteMission(tasks, handler)
+	return orch.ExecuteAutonomousMission(prompt, minimaxClient.GetManagerPlan, handler)
 }
 
 // executeSingleAction performs a standalone atomic action.
@@ -216,9 +313,60 @@ func executeSingleAction(prompt string, minimaxClient *minimax.Client, openCodeR
 		return "", fmt.Errorf("MiniMax action error: %v", err)
 	}
 
-	actionName := actionData["action"]
-	fmt.Printf("▶️  Task mapping: %s\n", actionName)
+	return executeSingleActionInternal(actionData, minimaxClient, openCodeRunner, projectDir)
+}
 
+// executeActionWithVenice uses the Venice/Mithril model to plan and execute tasks.
+func executeActionWithVenice(prompt string, veniceClient *venice.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
+	fmt.Println("⚪ Venice/Mithril is creating a mission plan...")
+	
+	systemPrompt := `You are the ARCHITECT AGENT for NanoClaw.
+Receive the directive and break it into a logical sequence of subtasks.
+Format for delegations: -> [ROLE]: task description
+Roles: CODER, RESEARCHER, DESIGNER, TESTER.`
+
+	plan, err := veniceClient.GenerateAction(prompt, systemPrompt)
+	if err != nil {
+		return "", fmt.Errorf("venice plan error: %v", err)
+	}
+
+	tasks := orchestrator.ParseDelegations(plan)
+	if len(tasks) == 0 {
+		return executeSingleActionWithVenice(prompt, veniceClient, openCodeRunner, projectDir)
+	}
+
+	orch := &orchestrator.Orchestrator{}
+	handler := func(taskPrompt string, role string) (string, error) {
+		return executeSingleActionWithVenice(taskPrompt, veniceClient, openCodeRunner, projectDir)
+	}
+
+	return orch.ExecuteAutonomousMission(prompt, func(ctx string) (string, error) {
+		return veniceClient.GenerateAction(ctx, systemPrompt)
+	}, handler)
+}
+
+// executeSingleActionWithVenice maps a prompt to a specific tool using Venice.
+func executeSingleActionWithVenice(prompt string, veniceClient *venice.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
+	systemPrompt := `You are an AI desktop agent. Map the request to a tool.
+Tools: OpenDocument, CreateDocument, WebSearch, YouTubeSearch, TerminalCommand, OpenCode, AgentDesktopControl, ChatResponse
+Respond with ONLY ONE valid JSON object: {"action": "ActionName", ...args}`
+
+	content, err := veniceClient.GenerateAction(prompt, systemPrompt)
+	if err != nil {
+		return "", err
+	}
+
+	var actionData map[string]string
+	if err := minimax.DecodeFirstJSON(content, &actionData); err != nil {
+		return "", err
+	}
+
+	return executeSingleActionInternal(actionData, nil, openCodeRunner, projectDir)
+}
+
+// executeSingleActionInternal is a helper that wraps the common action switch
+func executeSingleActionInternal(actionData map[string]string, minimaxClient *minimax.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
+	actionName := actionData["action"]
 	var cmdErr error
 	switch actionName {
 	case "OpenDocument":
@@ -231,6 +379,16 @@ func executeSingleAction(prompt string, minimaxClient *minimax.Client, openCodeR
 		cmdErr = computer.YouTubeSearch(actionData["query"])
 	case "PlayMusic":
 		cmdErr = computer.PlayMusic(actionData["query"])
+	case "WhatsApp":
+		cmdErr = computer.OpenWhatsApp(actionData["phone"], actionData["text"])
+	case "Paint":
+		cmdErr = computer.OpenPaint()
+	case "RemoteCommand":
+		res, err := computer.ExecuteRemoteCommand(actionData["host"], actionData["user"], actionData["command"])
+		if err != nil {
+			return res, err
+		}
+		return fmt.Sprintf("Remote result from %s:\n%s", actionData["host"], res), nil
 	case "TerminalCommand":
 		fmt.Printf("⚙️  Running command: %s\n", actionData["command"])
 		cmd := exec.Command("sh", "-c", actionData["command"])
@@ -249,15 +407,15 @@ func executeSingleAction(prompt string, minimaxClient *minimax.Client, openCodeR
 		return fmt.Sprintf("OpenCode completed:\n%s", out), nil
 	case "AgentDesktopControl":
 		fmt.Printf("🖥️  Agent taking control of desktop: %s\n", actionData["prompt"])
-		out, errCmd := executeAutonomousLoop(actionData["prompt"], minimaxClient)
-		if errCmd != nil {
+		if minimaxClient != nil {
+			out, errCmd := executeAutonomousLoop(actionData["prompt"], minimaxClient)
 			return out, errCmd
 		}
-		return out, nil
+		return "AgentDesktopControl (Vision) currently requires MiniMax for visual reasoning.", nil
 	case "ChatResponse":
 		return actionData["reply"], nil
 	default:
-		return "", fmt.Errorf("unknown action from AI: %s", actionName)
+		return "", fmt.Errorf("unknown action: %s", actionName)
 	}
 
 	if cmdErr != nil {

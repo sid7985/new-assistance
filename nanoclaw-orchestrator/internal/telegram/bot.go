@@ -1,11 +1,15 @@
 package telegram
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -63,6 +67,54 @@ func (b *Bot) SendMessage(text string) error {
 		return err
 	}
 	defer resp.Body.Close()
+	return nil
+}
+
+// SendScreenshot sends an image file to the configured Telegram chat.
+func (b *Bot) SendScreenshot(imagePath string, caption string) error {
+	file, err := os.Open(imagePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("photo", filepath.Base(imagePath))
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return err
+	}
+
+	_ = writer.WriteField("chat_id", b.ChatID)
+	_ = writer.WriteField("caption", caption)
+	err = writer.Close()
+	if err != nil {
+		return err
+	}
+
+	requestURL := fmt.Sprintf("%s%s/sendPhoto", telegramAPI, b.Token)
+	req, err := http.NewRequest("POST", requestURL, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to send photo: %s", string(respBody))
+	}
+
 	return nil
 }
 

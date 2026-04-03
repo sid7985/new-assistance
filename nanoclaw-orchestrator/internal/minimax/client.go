@@ -13,7 +13,7 @@ import (
 
 // MiniMax Anthropic-compatible endpoint
 const minimaxAPIEndpoint = "https://api.minimax.io/anthropic/v1/messages"
-const defaultModel = "MiniMax-M2.7"
+const defaultModel = "MiniMax-M2.7" // Flagship agentic model
 
 type Client struct {
 	APIKey  string
@@ -125,7 +125,7 @@ func (c *Client) AnalyzeScreen(imagePath string, promptContext string) (string, 
 
 	payload := MessagePayload{
 		Model:     defaultModel,
-		MaxTokens: 1024,
+		MaxTokens: 2048, // Increased for M2.7
 		Messages: []Message{
 			{
 				Role: "user",
@@ -138,7 +138,7 @@ func (c *Client) AnalyzeScreen(imagePath string, promptContext string) (string, 
 							Data:      base64Img,
 						},
 					},
-					{Type: "text", Text: promptContext},
+					{Type: "text", Text: "Analyze this screen. " + promptContext},
 				},
 			},
 		},
@@ -147,7 +147,7 @@ func (c *Client) AnalyzeScreen(imagePath string, promptContext string) (string, 
 	return c.callAnthropicAPI(payload)
 }
 
-func decodeFirstJSON(input string, v interface{}) error {
+func DecodeFirstJSON(input string, v interface{}) error {
 	start := strings.Index(input, "{")
 	if start == -1 {
 		return fmt.Errorf("no valid JSON object found in input")
@@ -177,23 +177,24 @@ func decodeFirstJSON(input string, v interface{}) error {
 }
 
 func (c *Client) GetDesktopAction(promptContext string) (map[string]string, error) {
-	systemPrompt := `You are an AI desktop agent. Map the user's request to one of the following tools.
-Tools:
-1. "OpenDocument" - Args: "path" (the file/folder path)
-2. "CreateDocument" - Args: "path", "content" (the file path and the file content)
-3. "WebSearch" - Args: "query"
-4. "YouTubeSearch" - Args: "query"
-5. "PlayMusic" - Args: "query"
-6. "TerminalCommand" - Args: "command" (if they just ask to run a generic shell command)
-7. "OpenCode" - Args: "prompt" (if the user asks to write code, generate an app, or edit files in the project workspace)
-8. "AgentDesktopControl" - Args: "prompt" (if the user asks to control the PC directly via visual/mouse/keyboard steps)
-9. "ChatResponse" - Args: "reply" (if the user is just chatting, saying hi, or asking a conversational question)
+	systemPrompt := `You are the MINI-MAX 2.7 AGENT CORE. You control a macOS workstation.
+Map the Founder's request to the NEXT logical tool.
 
-Respond with ONLY ONE valid JSON object representing the NEXT logical step.
-Note: On this system, use 'python3' instead of 'python' for shell commands.
-Do not include any Markdown, explanations, or multiple objects.
-Example:
-{"action": "ActionName", "path": "...", "content": "...", "query": "...", "command": "...", "prompt": "...", "reply": "..."}`
+TOOLS:
+- "OpenDocument": {"path": "..."} - Open file/app.
+- "CreateDocument": {"path": "...", "content": "..."} - Write file.
+- "WebSearch": {"query": "..."} - Search Google.
+- "YouTubeSearch": {"query": "..."} - Search YouTube.
+- "PlayMusic": {"query": "..."} - Play Spotify.
+- "TerminalCommand": {"command": "..."} - Run shell (use python3).
+- "OpenCode": {"prompt": "..."} - Write/Edit project code.
+- "AgentDesktopControl": {"prompt": "..."} - VISUAL CONTROL loop (Click/Type).
+- "ChatResponse": {"reply": "..."} - Conversational reply.
+- "WhatsApp": {"phone": "...", "text": "..."} - Send WhatsApp.
+- "Paint": {} - Open Freeform/Drawing.
+
+Respond with ONLY one JSON object. Be decisive and autonomous.
+Example: {"action": "TerminalCommand", "command": "python3 script.py"}`
 
 	payload := MessagePayload{
 		Model:     defaultModel,
@@ -210,8 +211,8 @@ Example:
 	}
 
 	var result map[string]string
-	if err := decodeFirstJSON(content, &result); err != nil {
-		return nil, fmt.Errorf("AI response was not valid JSON: %s. error: %v", content, err)
+	if err := DecodeFirstJSON(content, &result); err != nil {
+		return nil, fmt.Errorf("MiniMax 2.7 error: Invalid JSON. body: %s", content)
 	}
 
 	return result, nil
@@ -267,7 +268,7 @@ Example:
 	}
 
 	var result map[string]interface{}
-	if err := decodeFirstJSON(content, &result); err != nil {
+	if err := DecodeFirstJSON(content, &result); err != nil {
 		return nil, fmt.Errorf("AI response was not valid JSON: %s. error: %v", content, err)
 	}
 
@@ -275,32 +276,25 @@ Example:
 }
 
 func (c *Client) GetManagerPlan(directive string) (string, error) {
-	systemPrompt := `You are the PURPLE MANAGER AGENT for NanoClaw. 
-Your job is to receive the Founder's (User's) directive and break it into a logical sequence of subtasks for your team.
+	systemPrompt := `You are the PRIMARY MINI-MAX 2.7 ORCHESTRATOR.
+Break the objective into a sequence of delegations for specialized sub-agents.
 
-Available specialized roles:
-- CODER: Write code, create files, run terminal commands, or handle file operations.
-- RESEARCHER: Search the web, find information, or analyze data.
-- DESIGNER: Handle visual layouts, logic design, or styling.
-- TESTER: Verify work, check for errors, or validate results.
+ROLES:
+- CODER: File systems, coding, terminal work.
+- RESEARCHER: Web intelligence, data gathering.
+- DESIGNER: Visuals, App structure, logic.
+- TESTER: Validation, bug hunting.
 
-You MUST respond in this EXACT format for each delegation:
--> [ROLE]: detailed task description
+Format:
+-> [ROLE]: step description
+...
+Mission Summary: short summary
 
-Example:
--> [RESEARCHER]: find the latest news about Go 1.25
--> [CODER]: create a summary.md with the findings
-
-After the delegations, provide a one-line mission summary.
-Do not include any other conversational text.
-
-IMPORTANT: Each delegation must be a SINGLE ATOMIC ACTION. 
-If you need to create a script and then run it, you MUST create TWO delegations (one for CODER: CreateDocument and one for CODER: TerminalCommand).
-On this system, always use 'python3' to run scripts.`
+Be aggressive and autonomous. Do not ask for permissions. Just execute.`
 
 	payload := MessagePayload{
 		Model:     defaultModel,
-		MaxTokens: 1024,
+		MaxTokens: 2048,
 		System:    systemPrompt,
 		Messages: []Message{
 			{Role: "user", Content: []Content{{Type: "text", Text: directive}}},

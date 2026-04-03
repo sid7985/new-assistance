@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"time"
 )
 
 // OpenDocument opens any file with the default macOS application.
@@ -57,4 +59,65 @@ func CloneRepo(repoURL, destDir string) error {
 	}
 	fmt.Printf("✅ Repo cloned successfully into %s\n", destDir)
 	return nil
+}
+// OpenWhatsApp opens the WhatsApp desktop application or web link.
+func OpenWhatsApp(phone string, text string) error {
+	messageURL := "https://web.whatsapp.com/send?phone=" + phone
+	if text != "" {
+		messageURL += "&text=" + url.QueryEscape(text)
+	}
+	fmt.Printf("💬 Messaging on WhatsApp: %s\n", phone)
+	return exec.Command("open", messageURL).Run()
+}
+
+// OpenPaint opens a simple drawing canvas (macOS Freeform).
+func OpenPaint() error {
+	fmt.Printf("🎨 Opening Paint (Freeform)...\n")
+	return exec.Command("open", "-a", "Freeform").Run()
+}
+
+// ExecuteRemoteCommand runs a shell command on a client server via SSH.
+func ExecuteRemoteCommand(host, user, command string) (string, error) {
+	fmt.Printf("🌐 Accessing client server: %s@%s | Command: %s\n", user, host, command)
+	cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", fmt.Sprintf("%s@%s", user, host), command)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("SSH failure: %v. Output: %s", err, string(out))
+	}
+	fmt.Printf("✅ Remote command successful on %s\n", host)
+	return string(out), nil
+}
+
+// CreateAgentWorktree creates an isolated git worktree for a specific agent persona,
+// ensuring their code modifications do not interfere with the main trunk unless explicitly merged.
+func CreateAgentWorktree(projectDir, agentName string) (string, error) {
+	worktreePath := filepath.Join(projectDir, ".agents", agentName)
+	
+	// Create .agents dir if it doesn't exist
+	if err := os.MkdirAll(filepath.Join(projectDir, ".agents"), 0755); err != nil {
+		return "", err
+	}
+
+	// Verify the project is a git repo
+	if err := exec.Command("git", "-C", projectDir, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		// If not a git repo, just return a regular directory for isolation
+		err = os.MkdirAll(worktreePath, 0755)
+		return worktreePath, err
+	}
+
+	// Check if worktree already exists
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		return worktreePath, nil // Already isolated
+	}
+
+	branchName := fmt.Sprintf("agent/%s/%d", agentName, time.Now().Unix())
+	fmt.Printf("🌿 Expanding Agent Worktree for %s at %s\n", agentName, worktreePath)
+	
+	cmd := exec.Command("git", "-C", projectDir, "worktree", "add", "-b", branchName, worktreePath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git worktree failed: %v, out: %s", err, out)
+	}
+
+	return worktreePath, nil
 }

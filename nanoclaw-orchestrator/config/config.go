@@ -22,6 +22,8 @@ type Config struct {
 	PerplexityResponseY int
 	TelegramBotToken    string
 	TelegramChatID      string
+	VeniceAPIKey        string
+	VeniceModel         string
 }
 
 func Load() *Config {
@@ -44,6 +46,8 @@ func Load() *Config {
 		PerplexityResponseY: getEnvInt("PPLX_RESPONSE_Y", 600),
 		TelegramBotToken:    getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramChatID:      getEnv("TELEGRAM_CHAT_ID", ""),
+		VeniceAPIKey:        getEnv("VENICE_API_KEY", ""),
+		VeniceModel:         getEnv("VENICE_MODEL", "venice-m1-pro"), // Default Mithril-class model on Venice
 	}
 }
 

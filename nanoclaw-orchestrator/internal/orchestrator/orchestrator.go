@@ -141,28 +141,52 @@ func (o *Orchestrator) NewProject(name string) {
 	fmt.Printf("[%s] Switched to new project: %s\n", time.Now().Format(time.Kitchen), name)
 }
 
-// ExecuteMission runs a sequence of tasks until completion or failure.
-func (o *Orchestrator) ExecuteMission(tasks []Task, handler func(string, string) (string, error)) (string, error) {
-	fmt.Printf("\n🚀 Starting Mission with %d tasks...\n", len(tasks))
-	var finalResults []string
+// ExecuteAutonomousMission runs a goal-driven loop where MiniMax decides the next step iteratively.
+func (o *Orchestrator) ExecuteAutonomousMission(goal string, planFetcher func(string) (string, error), taskHandler func(string, string) (string, error)) (string, error) {
+	fmt.Printf("\n🚀 Starting Autonomous MiniMax 2.7 Mission: %s\n", goal)
+	
+	currentContext := goal
+	maxSteps := 15
+	var missionHistory []string
 
-	for i, task := range tasks {
-		fmt.Printf("\n📋 [%d/%d] Role: %s | Task: %s\n", i+1, len(tasks), task.AssignedTo, task.Description)
+	for i := 1; i <= maxSteps; i++ {
+		fmt.Printf("\n🧠 [Step %d/%d] Planning next logical action...\n", i, maxSteps)
 		
-		// Map Role to a refined prompt for the handler
-		rolePrompt := fmt.Sprintf("Role: %s. Task: %s", task.AssignedTo, task.Description)
-		result, err := handler(rolePrompt, task.AssignedTo)
+		// Use MiniMax to generate the next sub-plan based on current progress
+		plan, err := planFetcher(currentContext)
+		if err != nil {
+			return "", fmt.Errorf("autonomous planning error: %v", err)
+		}
+
+		tasks := ParseDelegations(plan)
+		if len(tasks) == 0 {
+			fmt.Println("🏁 No more tasks in plan. Mission complete?")
+			return strings.Join(missionHistory, "\n"), nil
+		}
+
+		// Execute the first task from the plan and then re-evaluate
+		task := tasks[0]
+		fmt.Printf("📋 Role: %s | Task: %s\n", task.AssignedTo, task.Description)
+		
+		rolePrompt := fmt.Sprintf("Role: %s. Task: %s. Previous Context: %s", task.AssignedTo, task.Description, strings.Join(missionHistory, " | "))
+		result, err := taskHandler(rolePrompt, task.AssignedTo)
 		
 		if err != nil {
-			fmt.Printf("❌ Task failed: %v\n", err)
-			return "", fmt.Errorf("mission failed at task %d (%s): %w", i+1, task.AssignedTo, err)
+			fmt.Printf("⚠️ Task evaluation: %v\n", err)
+			currentContext = fmt.Sprintf("Goal: %s. TASK FAILED: %s. Error: %v. Adjust plan accordingly.", goal, task.Description, err)
+		} else {
+			fmt.Printf("✅ Task progress: %s\n", result)
+			missionHistory = append(missionHistory, fmt.Sprintf("Step %d (%s): %s", i, task.AssignedTo, result))
+			currentContext = fmt.Sprintf("Goal: %s. PROGRESS: %s. Decide the FINAL or NEXT step.", goal, strings.Join(missionHistory, " | "))
 		}
-		
-		fmt.Printf("✅ Task completed: %s\n", result)
-		finalResults = append(finalResults, fmt.Sprintf("- %s: %s", task.AssignedTo, result))
+
+		// If the agent indicates the mission is complete in its summary or if we see a natural end
+		if strings.Contains(strings.ToLower(plan), "mission complete") || strings.Contains(strings.ToLower(plan), "all tasks finished") {
+			fmt.Println("🏁 MiniMax signaled mission completion.")
+			break
+		}
 	}
 
-	fmt.Println("\n✨ Mission successfully completed!")
-	return strings.Join(finalResults, "\n"), nil
+	return strings.Join(missionHistory, "\n"), nil
 }
 
