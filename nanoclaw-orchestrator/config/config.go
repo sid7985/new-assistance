@@ -24,6 +24,7 @@ type Config struct {
 	TelegramChatID      string
 	VeniceAPIKey        string
 	VeniceModel         string
+	MachineName         string
 }
 
 func Load() *Config {

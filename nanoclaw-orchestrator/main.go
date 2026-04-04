@@ -96,7 +96,7 @@ func main() {
 	// Start Telegram bot listener in background (if configured)
 	var tgBot *telegram.Bot
 	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
-		tgBot = telegram.NewBot(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.ProjectDir, func(req string) (string, error) {
+		tgBot = telegram.NewBot(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.ProjectDir, cfg.MachineName, func(req string) (string, error) {
 			// ── Budget Gate (Paperclip-inspired) ──
 			if db != nil && db.IsBudgetExceeded() {
 				limit, spent, _ := db.GetBudgetStatus()

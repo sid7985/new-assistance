@@ -1,0 +1,17 @@
+
+   _                _   _ _         _ 
+  | |    ___   __ _| |_| |_ _ __ | |
+  | |   / _ \ / _' | __|  _| '_ \| |
+  | |__|  __/ | (_| | |_| | | | | | |
+  |_____\___| \__,_|\__|_| |_| |_|_| |
+      NanoClaw Orchestrator v1.0      
+[1:28AM] Switched to new project: Nanoclaw
+💓 Heartbeat started with interval 5m0s
+🌐 Starting NanoClaw REST API on port 8080...
+📡 Telegram bot listening for repo URLs...
+
+🤖 NanoClaw Interactive Mode
+Paste your prompt from Perplexity/Comet. Type 'END' on a new line to submit, or 'exit' to quit.
+
+=== Prompt 1 ===
+> ⚠️  API Server failed: listen tcp :8080: bind: address already in use

@@ -25,14 +25,16 @@ type Bot struct {
 	ProjectDir    string
 	lastUpdate    int
 	ActionHandler func(string) (string, error)
+	MachineName   string
 }
 
-func NewBot(token, chatID, projectDir string, handler func(string) (string, error)) *Bot {
+func NewBot(token, chatID, projectDir, machineName string, handler func(string) (string, error)) *Bot {
 	return &Bot{
 		Token:         token,
 		ChatID:        chatID,
 		ProjectDir:    projectDir,
 		ActionHandler: handler,
+		MachineName:   machineName,
 	}
 }
 
@@ -42,17 +44,39 @@ type telegramResponse struct {
 }
 
 type update struct {
-	UpdateID int     `json:"update_id"`
-	Message  message `json:"message"`
+	UpdateID      int           `json:"update_id"`
+	Message       *message      `json:"message,omitempty"`
+	CallbackQuery *callbackQuery `json:"callback_query,omitempty"`
 }
 
 type message struct {
-	Text string `json:"text"`
-	Chat chat   `json:"chat"`
+	MessageID int    `json:"message_id"`
+	Text      string `json:"text"`
+	Chat      chat   `json:"chat"`
+}
+
+type callbackQuery struct {
+	ID      string   `json:"id"`
+	From    user     `json:"from"`
+	Message *message `json:"message,omitempty"`
+	Data    string   `json:"data"` // This will store the MachineName selected
+}
+
+type user struct {
+	ID int64 `json:"id"`
 }
 
 type chat struct {
 	ID int64 `json:"id"`
+}
+
+type inlineKeyboardMarkup struct {
+	InlineKeyboard [][]inlineKeyboardButton `json:"inline_keyboard"`
+}
+
+type inlineKeyboardButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
 }
 
 var repoURLPattern = regexp.MustCompile(`https?://[^\s]+\.git|https?://github\.com/[^\s]+`)
@@ -63,6 +87,36 @@ func (b *Bot) SendMessage(text string) error {
 	requestURL := fmt.Sprintf("%s%s/sendMessage?chat_id=%s&text=%s",
 		telegramAPI, b.Token, b.ChatID, encodedText)
 	resp, err := http.Get(requestURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+// SendMessageWithKeyboard sends a message with inline buttons for machine selection.
+func (b *Bot) SendMessageWithKeyboard(text string, machines []string) error {
+	var buttons []inlineKeyboardButton
+	for _, m := range machines {
+		buttons = append(buttons, inlineKeyboardButton{
+			Text:         m,
+			CallbackData: m + "::" + text, // "Mac::Take a screenshot"
+		})
+	}
+
+	markup := inlineKeyboardMarkup{
+		InlineKeyboard: [][]inlineKeyboardButton{buttons},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      b.ChatID,
+		"text":         text,
+		"reply_markup": markup,
+	}
+
+	body, _ := json.Marshal(payload)
+	requestURL := fmt.Sprintf("%s%s/sendMessage", telegramAPI, b.Token)
+	resp, err := http.Post(requestURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
@@ -142,23 +196,52 @@ func (b *Bot) PollForRepoURLs(stopChan <-chan struct{}) {
 				}
 				b.lastUpdate = u.UpdateID
 
+				// 1. Handle Callback Queries (Button Clicks)
+				if u.CallbackQuery != nil {
+					data := u.CallbackQuery.Data // e.g. "Mac::Take a screenshot"
+					parts := strings.SplitN(data, "::", 2)
+					if len(parts) == 2 {
+						targetMachine := parts[0]
+						commandText := parts[1]
+
+						// Each instance checks if it is the target
+						if targetMachine == b.MachineName {
+							fmt.Printf("🎯 [Machine %s] executing: %s\n", b.MachineName, commandText)
+							b.SendMessage(fmt.Sprintf("⚡️ [Machine %s] Proceeding: %s", b.MachineName, commandText))
+							
+							if b.ActionHandler != nil {
+								go func(text string) {
+									reply, err := b.ActionHandler(text)
+									if err != nil {
+										b.SendMessage(fmt.Sprintf("❌ [%s] Error: %v", b.MachineName, err))
+									} else {
+										b.SendMessage(fmt.Sprintf("🤖 [%s] %s", b.MachineName, reply))
+									}
+								}(commandText)
+							}
+						}
+					}
+					continue
+				}
+
+				// 2. Handle standard messages (Command Input)
+				if u.Message == nil || u.Message.Text == "" {
+					continue
+				}
+
 				matches := repoURLPattern.FindAllString(u.Message.Text, -1)
 				if len(matches) == 0 {
 					fmt.Printf("📨 Received chat request from Telegram: %s\n", u.Message.Text)
-					if b.ActionHandler != nil {
-						b.SendMessage("⏳ Processing...")
-						// Run asynchronously to prevent blocking Telegram loop for long OS tasks
-						go func(text string) {
-							reply, err := b.ActionHandler(text)
-							if err != nil {
-								b.SendMessage(fmt.Sprintf("❌ Command error: %v", err))
-							} else {
-								b.SendMessage(fmt.Sprintf("🤖 %s", reply))
-							}
-						}(u.Message.Text)
-					} else {
-						b.SendMessage("🤖 NanoClaw Action Handler offline.")
-					}
+					
+					// Instead of immediate execution, ask which machine to use
+					machines := []string{"Mac", "Windows"}
+					b.SendMessageWithKeyboard("Which machine should handle this?", machines)
+					
+					// Store the command context in the button's callback data
+					// Note: Telegram callback data has a 64-byte limit. 
+					// If command is long, we'd need a DB-backed session ID instead.
+					// For now, let's just send the machines prompt.
+
 					continue
 				}
 
