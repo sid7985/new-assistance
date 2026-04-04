@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -157,24 +158,36 @@ func main() {
 		go tgBot.PollForRepoURLs(tgStopChan)
 		defer close(tgStopChan)
 
-		// Start Proactive Heartbeat (every 5 minutes)
-		hb := orchestrator.NewHeartbeat(5 * time.Minute)
+		// Start Proactive Heartbeat (System Insight Scan)
+		hb := orchestrator.NewHeartbeat(2 * time.Minute) // Shortened for 'Agency' responsiveness
 		hb.Start(func() {
-			fmt.Println("\n💓 Heartbeat: Proactively checking for tasks...")
+			fmt.Println("\n💓 Heartbeat: Agency Performance Scan...")
 			screenPath := "/tmp/nanoclaw_heartbeat_screen.png"
 			if err := computer.TakeScreenshot(screenPath); err == nil {
-				prompt := "Proactive Check: Look at the current screen and your project context. Is there anything you should be doing right now to help the Founder? If so, formulate a plan. If not, reply with 'Status: All quiet'."
-				var reply string
+				prompt := "Role: CEO. Analyze the screen. If you see a code error, terminal crash, or something obviously broken, reply with 'MISSION: [RECOVERY]: <fix description>'. If everything looks good, reply 'Status: Nominal'."
+				
+				var analysis string
 				var err error
 				if *useVenice {
-					reply, err = executeActionWithVenice(0, db, prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
+					analysis, err = veniceClient.GenerateAction(prompt, "System Monitor Mode")
 				} else {
-					reply, err = executeActionFromPrompt(0, db, prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
+					analysis, mmErr := minimaxClient.AnalyzeScreen(screenPath, prompt)
+					analysis = analysis // MiniMax returns string directly
+					err = mmErr
 				}
 
-				if err == nil && reply != "" && !strings.Contains(reply, "All quiet") {
-					tgBot.SendMessage("💓 Proactive Action Triggered:\n" + reply)
-					tgBot.SendScreenshot(screenPath, "Current desktop state")
+				if err == nil && strings.Contains(analysis, "MISSION:") {
+					// ── Autonomous Recovery Trigger (Claw-Code Power) ──
+					re := regexp.MustCompile(`MISSION: \[(.*)\]: (.*)`)
+					matches := re.FindSubmatch([]byte(analysis))
+					if len(matches) >= 3 {
+						fixRef := string(matches[2])
+						tgBot.SendMessage("🚨 [PROACTIVE] Crisis Detected: " + fixRef + "\n⚡️ Agency is auto-fixing now...")
+						
+						// Create mission
+						missionID, _ := db.CreateMission("Autonomous Recovery: " + fixRef)
+						go executeActionFromPrompt(missionID, db, fixRef, minimaxClient, openCodeRunner, cfg.ProjectDir)
+					}
 				}
 			}
 		})
