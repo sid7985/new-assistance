@@ -76,6 +76,7 @@ func main() {
 	}
 
 	orch := &orchestrator.Orchestrator{
+		DB:        db,
 		Steps:     []orchestrator.WorkflowStep{},
 		Memory:    make(map[string]string),
 	}
@@ -128,9 +129,9 @@ func main() {
 			var reply string
 			var execErr error
 			if *useVenice {
-				reply, execErr = executeActionWithVenice(augmentedReq, veniceClient, openCodeRunner, cfg.ProjectDir)
+				reply, execErr = executeActionWithVenice(missionID, db, augmentedReq, veniceClient, openCodeRunner, cfg.ProjectDir)
 			} else {
-				reply, execErr = executeActionFromPrompt(augmentedReq, minimaxClient, openCodeRunner, cfg.ProjectDir)
+				reply, execErr = executeActionFromPrompt(missionID, db, augmentedReq, minimaxClient, openCodeRunner, cfg.ProjectDir)
 			}
 
 			// ── Audit Trail & Budget ──
@@ -166,9 +167,9 @@ func main() {
 				var reply string
 				var err error
 				if *useVenice {
-					reply, err = executeActionWithVenice(prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
+					reply, err = executeActionWithVenice(0, db, prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
 				} else {
-					reply, err = executeActionFromPrompt(prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
+					reply, err = executeActionFromPrompt(0, db, prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
 				}
 
 				if err == nil && reply != "" && !strings.Contains(reply, "All quiet") {
@@ -249,13 +250,19 @@ func main() {
 			continue
 		}
 
+		// ── Create a mission for tracking ──
+		var missionID int64
+		if db != nil {
+			missionID, _ = db.CreateMission(prompt)
+		}
+
 		_, err = orch.RunStep(orchestrator.WorkflowStep{
 			Name: fmt.Sprintf("prompt_%d", i),
 			Action: func() (string, error) {
 				if *useVenice {
-					return executeActionWithVenice(prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
+					return executeActionWithVenice(missionID, db, prompt, veniceClient, openCodeRunner, cfg.ProjectDir)
 				}
-				return executeActionFromPrompt(prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
+				return executeActionFromPrompt(missionID, db, prompt, minimaxClient, openCodeRunner, cfg.ProjectDir)
 			},
 		})
 		if err != nil {
@@ -285,25 +292,25 @@ func min(a, b int) int {
 }
 
 // executeActionFromPrompt uses the Manager Agent to decompose the prompt into a mission plan, then executes the tasks.
-func executeActionFromPrompt(prompt string, minimaxClient *minimax.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
-	fmt.Println("🟣 Manager Agent is creating a mission plan...")
+func executeActionFromPrompt(missionID int64, db *internal.Database, prompt string, minimaxClient *minimax.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
+	fmt.Println("🧠 MiniMax is analyzing the mission...")
+
 	plan, err := minimaxClient.GetManagerPlan(prompt)
 	if err != nil {
-		return "", fmt.Errorf("manager plan error: %v", err)
+		return "", fmt.Errorf("MiniMax plan error: %v", err)
 	}
 
 	tasks := orchestrator.ParseDelegations(plan)
 	if len(tasks) == 0 {
-		fmt.Println("⚠️  No delegations found in plan. Falling back to direct action.")
 		return executeSingleAction(prompt, minimaxClient, openCodeRunner, projectDir)
 	}
 
-	orch := &orchestrator.Orchestrator{}
+	orch := &orchestrator.Orchestrator{DB: db}
 	handler := func(taskPrompt string, role string) (string, error) {
 		return executeSingleAction(taskPrompt, minimaxClient, openCodeRunner, projectDir)
 	}
 
-	return orch.ExecuteAutonomousMission(prompt, minimaxClient.GetManagerPlan, handler)
+	return orch.ExecuteAutonomousMission(missionID, prompt, minimaxClient.GetManagerPlan, handler)
 }
 
 // executeSingleAction performs a standalone atomic action.
@@ -317,7 +324,7 @@ func executeSingleAction(prompt string, minimaxClient *minimax.Client, openCodeR
 }
 
 // executeActionWithVenice uses the Venice/Mithril model to plan and execute tasks.
-func executeActionWithVenice(prompt string, veniceClient *venice.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
+func executeActionWithVenice(missionID int64, db *internal.Database, prompt string, veniceClient *venice.Client, openCodeRunner *steps.OpenCodeRunner, projectDir string) (string, error) {
 	fmt.Println("⚪ Venice/Mithril is creating a mission plan...")
 	
 	systemPrompt := `You are the ARCHITECT AGENT for NanoClaw.
@@ -335,12 +342,12 @@ Roles: CODER, RESEARCHER, DESIGNER, TESTER.`
 		return executeSingleActionWithVenice(prompt, veniceClient, openCodeRunner, projectDir)
 	}
 
-	orch := &orchestrator.Orchestrator{}
+	orch := &orchestrator.Orchestrator{DB: db}
 	handler := func(taskPrompt string, role string) (string, error) {
 		return executeSingleActionWithVenice(taskPrompt, veniceClient, openCodeRunner, projectDir)
 	}
 
-	return orch.ExecuteAutonomousMission(prompt, func(ctx string) (string, error) {
+	return orch.ExecuteAutonomousMission(missionID, prompt, func(ctx string) (string, error) {
 		return veniceClient.GenerateAction(ctx, systemPrompt)
 	}, handler)
 }

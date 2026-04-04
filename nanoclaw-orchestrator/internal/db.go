@@ -3,6 +3,7 @@ package internal
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -75,6 +76,18 @@ func NewDatabase(dbPath string) (*Database, error) {
 			summary TEXT,
 			content TEXT,        -- The actual underlying chunk, if any
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+
+		// ── Mission TODO Ledger (Claw-Code Style) ──
+		`CREATE TABLE IF NOT EXISTS mission_todos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			mission_id INTEGER,
+			task_goal TEXT,
+			status TEXT DEFAULT 'pending', -- 'pending', 'running', 'completed', 'failed'
+			worker_type TEXT,               -- 'CEO', 'Developer', 'Cloud', 'Desktop'
+			output TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(mission_id) REFERENCES missions(id)
 		);`,
 
 		// Seed budget row if not exists
@@ -251,4 +264,47 @@ func (d *Database) GetEntityMemories(entityType, entityID string) ([]string, err
 		}
 	}
 	return memories, nil
+}
+
+// ═══════════════════════════════════════════
+// Mission TODO Ledger (Agency / Claw-Code)
+// ═══════════════════════════════════════════
+
+func (d *Database) AddMissionTodo(missionID int64, goal, workerType string) (int64, error) {
+	res, err := d.Conn.Exec("INSERT INTO mission_todos (mission_id, task_goal, worker_type) VALUES (?, ?, ?)", missionID, goal, workerType)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *Database) UpdateTodoStatus(todoID int64, status, output string) error {
+	_, err := d.Conn.Exec("UPDATE mission_todos SET status = ?, output = ? WHERE id = ?", status, output, todoID)
+	return err
+}
+
+func (d *Database) GetMissionTodos(missionID int64) (string, error) {
+	rows, err := d.Conn.Query("SELECT id, task_goal, status, worker_type FROM mission_todos WHERE mission_id = ?", missionID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var todos []string
+	for rows.Next() {
+		var id int64
+		var goal, status, worker string
+		if err := rows.Scan(&id, &goal, &status, &worker); err == nil {
+			icon := "⏳"
+			if status == "completed" {
+				icon = "✅"
+			} else if status == "failed" {
+				icon = "❌"
+			} else if status == "running" {
+				icon = "🏃"
+			}
+			todos = append(todos, fmt.Sprintf("%s [%s] %s (ID: %d)", icon, worker, goal, id))
+		}
+	}
+	return strings.Join(todos, "\n"), nil
 }

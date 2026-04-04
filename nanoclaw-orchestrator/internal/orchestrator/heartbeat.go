@@ -24,7 +24,16 @@ func (h *Heartbeat) Start(callback func()) {
 	go func() {
 		for range ticker.C {
 			h.LastCheck = time.Now()
+			// Callback can handle the vision logic
 			callback()
 		}
 	}()
+}
+
+// PerformAnalysis is a helper for proactive desktop checks (Paperclip/Claw style)
+func (h *Heartbeat) PerformAnalysis(analyzer func() (string, error)) {
+	result, err := analyzer()
+	if err == nil && result != "" {
+		fmt.Printf("💓 Proactive Analysis Result: %s\n", result)
+	}
 }

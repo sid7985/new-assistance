@@ -7,7 +7,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"nanoclaw-orchestrator/internal"
 )
+
 
 type WorkflowStep struct {
 	Name   string
@@ -15,9 +18,11 @@ type WorkflowStep struct {
 }
 
 type Orchestrator struct {
+	DB     *internal.Database
 	Steps  []WorkflowStep
 	Memory map[string]string
 }
+
 
 type Task struct {
 	AssignedTo  string
@@ -141,50 +146,54 @@ func (o *Orchestrator) NewProject(name string) {
 	fmt.Printf("[%s] Switched to new project: %s\n", time.Now().Format(time.Kitchen), name)
 }
 
-// ExecuteAutonomousMission runs a goal-driven loop where MiniMax decides the next step iteratively.
-func (o *Orchestrator) ExecuteAutonomousMission(goal string, planFetcher func(string) (string, error), taskHandler func(string, string) (string, error)) (string, error) {
-	fmt.Printf("\n🚀 Starting Autonomous MiniMax 2.7 Mission: %s\n", goal)
-	
-	currentContext := goal
-	maxSteps := 15
+// ExecuteAutonomousMission runs a goal-driven loop where the CEO (MiniMax) decomposes a goal into todos,
+// and then delegates them to workers while tracking progress in the database.
+func (o *Orchestrator) ExecuteAutonomousMission(missionID int64, goal string, planFetcher func(string) (string, error), taskHandler func(string, string) (string, error)) (string, error) {
+	fmt.Printf("\n🚀 [CEO] Starting Agency Mission #%d: %s\n", missionID, goal)
+
+	// Phase 1: Decomposition
+	fmt.Println("🧠 [CEO] Decomposing goal into actionable tasks...")
+	decompositionPrompt := fmt.Sprintf("Act as the CEO. Decompose this goal into a list of 3-7 discrete tasks. Format: '-> [WORKER]: task description'. Goal: %s", goal)
+	plan, err := planFetcher(decompositionPrompt)
+	if err != nil {
+		return "", fmt.Errorf("decomposition failed: %v", err)
+	}
+
+	tasks := ParseDelegations(plan)
+	if len(tasks) == 0 {
+		return "CEO could not identify actionable tasks.", nil
+	}
+
+	// Save tasks to DB as mission_todos
+	var todoIDs []int64
+	for _, t := range tasks {
+		if id, err := o.DB.AddMissionTodo(missionID, t.Description, t.AssignedTo); err == nil {
+			todoIDs = append(todoIDs, id)
+		}
+	}
+
+	// Phase 2: Execution
 	var missionHistory []string
-
-	for i := 1; i <= maxSteps; i++ {
-		fmt.Printf("\n🧠 [Step %d/%d] Planning next logical action...\n", i, maxSteps)
+	for i, todoID := range todoIDs {
+		task := tasks[i]
+		fmt.Printf("\n🏃 [Step %d/%d] Executing Task: %s\n", i+1, len(tasks), task.Description)
 		
-		// Use MiniMax to generate the next sub-plan based on current progress
-		plan, err := planFetcher(currentContext)
-		if err != nil {
-			return "", fmt.Errorf("autonomous planning error: %v", err)
-		}
+		// Mark as running
+		o.DB.UpdateTodoStatus(todoID, "running", "")
 
-		tasks := ParseDelegations(plan)
-		if len(tasks) == 0 {
-			fmt.Println("🏁 No more tasks in plan. Mission complete?")
-			return strings.Join(missionHistory, "\n"), nil
-		}
-
-		// Execute the first task from the plan and then re-evaluate
-		task := tasks[0]
-		fmt.Printf("📋 Role: %s | Task: %s\n", task.AssignedTo, task.Description)
-		
-		rolePrompt := fmt.Sprintf("Role: %s. Task: %s. Previous Context: %s", task.AssignedTo, task.Description, strings.Join(missionHistory, " | "))
+		rolePrompt := fmt.Sprintf("Goal: %s. Your Task: %s. Previous Progress: %s", goal, task.Description, strings.Join(missionHistory, " | "))
 		result, err := taskHandler(rolePrompt, task.AssignedTo)
-		
+
 		if err != nil {
-			fmt.Printf("⚠️ Task evaluation: %v\n", err)
-			currentContext = fmt.Sprintf("Goal: %s. TASK FAILED: %s. Error: %v. Adjust plan accordingly.", goal, task.Description, err)
-		} else {
-			fmt.Printf("✅ Task progress: %s\n", result)
-			missionHistory = append(missionHistory, fmt.Sprintf("Step %d (%s): %s", i, task.AssignedTo, result))
-			currentContext = fmt.Sprintf("Goal: %s. PROGRESS: %s. Decide the FINAL or NEXT step.", goal, strings.Join(missionHistory, " | "))
+			o.DB.UpdateTodoStatus(todoID, "failed", err.Error())
+			missionHistory = append(missionHistory, fmt.Sprintf("FAILED: %s", task.Description))
+			fmt.Printf("❌ Task Failed: %v\n", err)
+			continue // Or return if we want to halt
 		}
 
-		// If the agent indicates the mission is complete in its summary or if we see a natural end
-		if strings.Contains(strings.ToLower(plan), "mission complete") || strings.Contains(strings.ToLower(plan), "all tasks finished") {
-			fmt.Println("🏁 MiniMax signaled mission completion.")
-			break
-		}
+		o.DB.UpdateTodoStatus(todoID, "completed", result)
+		missionHistory = append(missionHistory, fmt.Sprintf("DONE: %s", result))
+		fmt.Printf("✅ Task Completed: %s\n", result)
 	}
 
 	return strings.Join(missionHistory, "\n"), nil

@@ -33,6 +33,7 @@ func StartServer(port string, db *internal.Database) {
 
 	mux.HandleFunc("/api/budget", s.handleBudget)
 	mux.HandleFunc("/api/missions", s.handleMissions)
+	mux.HandleFunc("/api/todos", s.handleTodos)
 	mux.HandleFunc("/api/audit", s.handleAudit)
 
 	fmt.Printf("🌐 Starting NanoClaw REST API on port %s...\n", port)
@@ -130,4 +131,48 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(logs)
+}
+
+type MissionTodo struct {
+	ID         int64  `json:"id"`
+	MissionID  int64  `json:"mission_id"`
+	Goal       string `json:"task_goal"`
+	Status     string `json:"status"`
+	WorkerType string `json:"worker_type"`
+	Output     string `json:"output"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (s *Server) handleTodos(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, "Database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	missionID := r.URL.Query().Get("mission_id")
+	query := `SELECT id, mission_id, task_goal, status, worker_type, output, created_at FROM mission_todos`
+	var args []interface{}
+
+	if missionID != "" {
+		query += " WHERE mission_id = ?"
+		args = append(args, missionID)
+	}
+	query += " ORDER BY created_at DESC LIMIT 100"
+
+	rows, err := s.db.Conn.Query(query, args...)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var todos []MissionTodo
+	for rows.Next() {
+		var t MissionTodo
+		if err := rows.Scan(&t.ID, &t.MissionID, &t.Goal, &t.Status, &t.WorkerType, &t.Output, &t.CreatedAt); err == nil {
+			todos = append(todos, t)
+		}
+	}
+
+	json.NewEncoder(w).Encode(todos)
 }
